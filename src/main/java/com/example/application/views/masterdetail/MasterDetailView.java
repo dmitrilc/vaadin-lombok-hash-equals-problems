@@ -11,6 +11,7 @@ import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dependency.Uses;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.GridMultiSelectionModel;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.icon.Icon;
@@ -27,8 +28,12 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.router.RouteAlias;
 import com.vaadin.flow.spring.data.VaadinSpringDataHelpers;
+
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import lombok.val;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 
@@ -60,6 +65,9 @@ public class MasterDetailView extends Div implements BeforeEnterObserver {
 
     private final SamplePersonService samplePersonService;
 
+    private final Button selectAll = new Button("Select All");
+    private final Button deselectAll = new Button("Deselect All");
+
     @Autowired
     public MasterDetailView(SamplePersonService samplePersonService) {
         this.samplePersonService = samplePersonService;
@@ -71,9 +79,12 @@ public class MasterDetailView extends Div implements BeforeEnterObserver {
         createGridLayout(splitLayout);
         createEditorLayout(splitLayout);
 
+        add(selectAll);
+        add(deselectAll);
         add(splitLayout);
 
         // Configure Grid
+        grid.setSelectionMode(Grid.SelectionMode.MULTI);
         grid.addColumn("firstName").setAutoWidth(true);
         grid.addColumn("lastName").setAutoWidth(true);
         grid.addColumn("email").setAutoWidth(true);
@@ -90,19 +101,49 @@ public class MasterDetailView extends Div implements BeforeEnterObserver {
         grid.addColumn(importantRenderer).setHeader("Important").setAutoWidth(true);
 
         grid.setItems(query -> samplePersonService.list(
-                PageRequest.of(query.getPage(), query.getPageSize(), VaadinSpringDataHelpers.toSpringDataSort(query)))
+                PageRequest.of(
+                        query.getPage(),
+                        query.getPageSize(),
+                        VaadinSpringDataHelpers.toSpringDataSort(query)))
                 .stream());
+        //grid.setItems(List.of());
         grid.addThemeVariants(GridVariant.LUMO_NO_BORDER);
 
         // when a row is selected or deselected, populate form
-        grid.asSingleSelect().addValueChangeListener(event -> {
+/*        grid.asSingleSelect().addValueChangeListener(event -> {
             if (event.getValue() != null) {
                 UI.getCurrent().navigate(String.format(SAMPLEPERSON_EDIT_ROUTE_TEMPLATE, event.getValue().getId()));
             } else {
                 clearForm();
                 UI.getCurrent().navigate(MasterDetailView.class);
             }
+        });*/
+
+        grid.asMultiSelect().addValueChangeListener(event -> {
+            if (event.getValue() != null && !event.getValue().isEmpty()) {
+                UI.getCurrent().navigate(String.format(SAMPLEPERSON_EDIT_ROUTE_TEMPLATE,
+                        List.copyOf(event.getValue()).get(event.getValue().size() - 1).getId())); //ugly code debugging
+            } else {
+                clearForm();
+                UI.getCurrent().navigate(MasterDetailView.class);
+            }
         });
+
+
+
+        //((GridMultiSelectionModel<SamplePerson>) grid.getSelectionModel()).selectAll();
+
+        selectAll.addClickListener(button -> {
+            ((GridMultiSelectionModel<SamplePerson>) grid.getSelectionModel()).selectAll();
+            var data = grid.getSelectedItems();
+            System.out.println(data.size());
+        });
+        deselectAll.addClickListener(button -> grid.deselectAll());
+
+/*        ((GridMultiSelectionModel<SamplePerson>) grid.getSelectionModel()).setSelectAllCheckboxVisibility(
+                GridMultiSelectionModel.SelectAllCheckboxVisibility.VISIBLE);*/
+
+        //grid
 
         // Configure Form
         binder = new BeanValidationBinder<>(SamplePerson.class);
@@ -125,7 +166,7 @@ public class MasterDetailView extends Div implements BeforeEnterObserver {
 
                 samplePersonService.update(this.samplePerson);
                 clearForm();
-                refreshGrid();
+                //refreshGrid(); //disables this to replicate issue
                 Notification.show("SamplePerson details stored.");
                 UI.getCurrent().navigate(MasterDetailView.class);
             } catch (ValidationException validationException) {
